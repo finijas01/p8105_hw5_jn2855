@@ -30,8 +30,6 @@ theme_set(theme_minimal() + theme(legend.position = "bottom"))
 
 ## Problem 1
 
-The code chunk below imports the data in individual spreadsheets contained in `./data/zip_data/`. To do this, I create a dataframe that includes the list of all files in that directory and the complete path to each file. As a next step, I `map` over paths and import data using the `read_csv` function. Finally, I `unnest` the result of `map`.
-
 ```{r}
 full_df = 
   tibble(
@@ -42,14 +40,14 @@ full_df =
   unnest()
 ```
 
-The result of the previous code chunk isn't tidy -- data are wide rather than long, and some important variables are included as parts of others. The code chunk below tides the data using string manipulations on the file, converting from wide to long, and selecting relevant variables. 
+ 
 
 ```{r}
 tidy_df = 
   full_df %>% 
   mutate(
     files = str_replace(files, ".csv", ""),
-    group = str_sub(files, 1, 3)) %>% 
+    group = str_sub(files, 1, 3)) %>% #start from 1, end at 3
   pivot_longer(
     week_1:week_8,
     names_to = "week",
@@ -59,7 +57,7 @@ tidy_df =
   select(group, subj = files, week, outcome)
 ```
 
-Finally, the code chunk below creates a plot showing individual data, faceted by group. 
+ 
 
 ```{r}
 tidy_df %>% 
@@ -69,6 +67,77 @@ tidy_df %>%
   facet_grid(~group)
 ```
 
-This plot suggests high within-subject correlation -- subjects who start above average end up above average, and those that start below average end up below average. Subjects in the control group generally don't change over time, but those in the experiment group increase their outcome in a roughly linear way. 
 
+## Problem 2
+
+### Describe the raw data
+
+```{r}
+homicide_raw = read_csv("https://raw.githubusercontent.com/washingtonpost/data-homicides/master/homicide-data.csv")
+```
+
+
+
+```{r}
+homicide_df =
+  homicide_raw %>% 
+  mutate(
+    city_state = str_c(city, ", ", state)
+  ) %>% 
+  select(-city, -state)
+
+city_df = 
+  homicide_df %>%
+  group_by(city_state) %>% 
+  summarize(
+   homicide_total = n(),
+   homicide_unsolved = sum((disposition == c("Open/No arrest", "Closed without arrest")))
+  ) %>% 
+  arrange(desc(homicide_total))
+
+city_df
+```
+
+
+
+```{r}
+baltimore = city_df %>% 
+  filter(city_state == "Baltimore, MD")
+
+prop_test_bal = prop.test(baltimore$homicide_unsolved, baltimore$homicide_total) %>% 
+  broom::tidy() %>% 
+  select(estimate, conf.low, conf.high)
+
+prop_test_bal
+```
+
+
+
+
+```{r}
+result_df = city_df %>% 
+  mutate(
+    prop_test = map2(.x = homicide_unsolved, .y = homicide_total, ~ prop.test(.x, .y) %>%
+                       broom::tidy())
+    ) %>% 
+  unnest() %>%
+  select(city_state, estimate, conf.low, conf.high)
+
+result_df
+```
+
+
+```{r}
+result_df %>%
+  mutate(
+    city_state = fct_reorder(city_state, estimate)
+    ) %>%
+  ggplot(aes(x = estimate, y = city_state)) + 
+  geom_point() + 
+  geom_errorbar(aes(xmin = conf.low, xmax = conf.high))
+```
+
+
+
+## Problem 3
 
